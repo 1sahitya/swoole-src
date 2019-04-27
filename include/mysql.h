@@ -333,26 +333,16 @@ enum sw_mysql_server_status_flags
                 sw_mysql_int4store((T+4),def_temp2); } while (0)
 
 #if defined(SW_DEBUG) && defined(SW_LOG_TRACE_OPEN)
-#define swMysqlPacketDump(_length, _number, data, title) \
-if (SW_LOG_TRACE >= SwooleG.log_level && (SW_TRACE_MYSQL_CLIENT & SwooleG.trace_flags)) \
-    do { \
-        uint32_t length = _length; \
-        uint8_t number = _number; \
-        swDebug("+----------+------------+-------------------------------------------------------+"); \
-        swDebug("| P#%-6u | L%-9zu | %-10zu %42s |", number, SW_MYSQL_PACKET_HEADER_SIZE + length, length, title); \
-        swDebug("+----------+------------+-----------+-----------+------------+------------------+"); \
-        for (size_t of = 0; of < SW_MYSQL_PACKET_HEADER_SIZE + length; of += 16) { \
-            char hex[16 * 3 + 1]; \
-            char str[16 + 1]; \
-            size_t i, hof = 0, sof = 0; \
-            for (i = of ; i < of + 16 && i < SW_MYSQL_PACKET_HEADER_SIZE + length ; i++) { \
-                hof += sprintf(hex+hof, "%02x ", (data)[i] & 0xff); \
-                sof += sprintf(str+sof, "%c", isprint((int)(data)[i]) ? (data)[i] : '.'); \
-            } \
-            swDebug("| %08x | %-48s| %-16s |", of, hex, str); \
-        } \
-        swDebug("+----------+------------+-----------+-----------+------------+------------------+"); \
-    } while(0)
+#define swMysqlPacketDump(length, number, data, title) _swMysqlPacketDump(length, number, data, title)
+static sw_inline void _swMysqlPacketDump(size_t length, uint8_t number, const char *data, const char* title)
+{
+    if (SW_LOG_TRACE >= SwooleG.log_level && (SW_TRACE_MYSQL_CLIENT & SwooleG.trace_flags))
+    {
+        swDebug("+----------+------------+-------------------------------------------------------+");;
+        swDebug("| P#%-6u | L%-9u | %-10u %42s |", number, SW_MYSQL_PACKET_HEADER_SIZE + length, length, title);
+        swoole::log::hex_dump(data, length);
+    }
+}
 #else
 #define swMysqlPacketDump(length, number, data, title)
 #endif
