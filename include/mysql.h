@@ -1087,12 +1087,17 @@ public:
 
     inline void alloc_fields(uint32_t length)
     {
-        if (fields.length > 0)
+        clear_fields();
+        if (likely(length != 0))
         {
-            delete[] fields.info;
+            fields.info = new field_packet[length];
+            fields.length = length;
         }
-        fields.info = new field_packet[length];
-        fields.length = length;
+        else
+        {
+            fields.length = 0;
+            fields.info = nullptr;
+        }
     }
     inline uint32_t get_fields_length()
     {
