@@ -502,17 +502,6 @@ static PHP_METHOD(swoole_mysql_coro_statement, nextResult);
 static PHP_METHOD(swoole_mysql_coro_statement, recv);
 static PHP_METHOD(swoole_mysql_coro_statement, close);
 
-//    typedef struct {
-//        // for used:
-//        ulong_t len;  // data length
-//        ulong_t remaining_size; // max remaining size that can be read
-//        uint32_t currrent_packet_remaining_size; // remaining size of current packet
-//        char *read_p; // where to start reading data
-//        // for result:
-//        uint32_t ext_header_len; // extra packet header length
-//        uint32_t ext_packet_len; // extra packet length (body only)
-//    } mysql_big_data_info;
-
 ZEND_BEGIN_ARG_INFO_EX(arginfo_swoole_void, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
@@ -706,8 +695,8 @@ const char* mysql_client::recv_packet()
     {
         return nullptr;
     }
-    length = mysql::server_packet::get_length(p);
-    swTraceLog(SW_TRACE_MYSQL_CLIENT, "recv packet length=%u, number=%u", length, mysql::server_packet::get_number(p));
+    length = mysql::packet::get_length(p);
+    swTraceLog(SW_TRACE_MYSQL_CLIENT, "recv packet length=%u, number=%u", length, mysql::packet::get_number(p));
     p = recv_length(length);
     if (unlikely(!p))
     {
@@ -967,7 +956,7 @@ void mysql_client::fetch(zval *return_value)
     }
     do {
         const char *p = data + SW_MYSQL_PACKET_HEADER_SIZE;
-        // const char *p_eof = p + mysql::server_packet::get_length(data);
+        // mysql::row_data_info row_data_info();
         array_init_size(return_value, result.get_fields_length());
         for (uint32_t i = 0; i < result.get_fields_length(); i++)
         {
@@ -1408,7 +1397,7 @@ void mysql_statement::send_execute_request(zval *return_value, zval *params)
         }
         ZEND_HASH_FOREACH_END();
     }
-    mysql::client_packet::set_header(buffer->str, buffer->length - SW_MYSQL_PACKET_HEADER_SIZE, 0);
+    mysql::packet::set_header(buffer->str, buffer->length - SW_MYSQL_PACKET_HEADER_SIZE, 0);
     if (unlikely(!client->send_raw(buffer->str, buffer->length)))
     {
         RETURN_FALSE;

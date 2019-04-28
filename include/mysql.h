@@ -633,7 +633,35 @@ inline uint8_t write_lcb(char *p, uint64_t length)
     }
 }
 
-class server_packet
+class packet
+{
+public:
+    static inline uint32_t get_length(const char *data)
+    {
+        return sw_mysql_uint2korr3korr(data);
+    }
+    static inline uint32_t get_number(const char *data)
+    {
+        return (uint8_t) data[3];
+    }
+    static inline void set_length(char *buffer, uint32_t length)
+    {
+        buffer[0] = length;
+        buffer[1] = length >> 8;
+        buffer[2] = length >> 16;
+    }
+    static inline void set_number(char *buffer, uint8_t number)
+    {
+        buffer[3] = number;
+    }
+    static inline void set_header(char *buffer, uint32_t length, uint8_t number)
+    {
+        set_length(buffer, length);
+        set_number(buffer, number);
+    }
+};
+
+class server_packet : public packet
 {
 public:
     struct header {
@@ -648,8 +676,8 @@ public:
     }
     inline void parse(const char *data)
     {
-        header.length = sw_mysql_uint2korr3korr(data);
-        header.number = (uint8_t) data[3];
+        header.length = packet::get_length(data);
+        header.number = packet::get_number(data);
     }
     static inline uint8_t parse_type(const char *data)
     {
@@ -658,14 +686,6 @@ public:
             return SW_MYSQL_PACKET_NULL;
         }
         return (uint8_t) data[SW_MYSQL_PACKET_HEADER_SIZE];
-    }
-    static inline uint32_t get_length(const char *data)
-    {
-        return sw_mysql_uint2korr3korr(data);
-    }
-    static inline uint32_t get_number(const char *data)
-    {
-        return  (uint8_t) data[3];
     }
     static inline bool is_eof(const char *data)
     {
@@ -681,7 +701,7 @@ public:
     }
 };
 
-class server_status_t
+class server_status
 {
 public:
     int16_t status = 0;
@@ -697,17 +717,9 @@ public:
     }
 };
 
-class client_packet
+class client_packet : public packet
 {
 public:
-    static inline void set_header(char *buffer, uint32_t length, uint8_t number)
-    {
-        buffer[0] = length;
-        buffer[1] = length >> 8;
-        buffer[2] = length >> 16;
-        buffer[3] = number;
-    }
-
     client_packet(size_t body_size = 1024 - SW_MYSQL_PACKET_HEADER_SIZE)
     {
         SW_ASSERT(body_size > 0);
@@ -743,7 +755,7 @@ public:
     }
     inline void set_header(uint32_t length, uint8_t number)
     {
-        set_header(data.header, length, number);
+        packet::set_header(data.header, length, number);
     }
     ~client_packet()
     {
@@ -792,7 +804,7 @@ class ok_packet : public server_packet
 public:
     uint64_t affected_rows = 0;
     uint64_t last_insert_id = 0;
-    server_status_t server_status;
+    mysql::server_status server_status;
     unsigned int warning_count = 0;
     ok_packet() { }
     ok_packet(const char *data);
@@ -802,7 +814,7 @@ class eof_packet : public server_packet
 {
 public:
     uint16_t warning_count;
-    server_status_t server_status;
+    mysql::server_status server_status;
     eof_packet(const char *data);
 };
 
@@ -827,7 +839,7 @@ public:
     char filler = 0;
     int capability_flags = 0;
     char charset = SW_MYSQL_DEFAULT_CHARSET;
-    server_status_t status_flags;
+    mysql::server_status status_flags;
     char reserved[10] = {0};
     std::string auth_plugin_name = "";
     greeting_packet(const char *data);
