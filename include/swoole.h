@@ -484,8 +484,29 @@ enum swWorker_status
         SwooleG.write_log(SW_LOG_DEBUG, sw_error, _sw_errror_len);\
         SwooleGS->lock_2.unlock(&SwooleGS->lock_2);\
     }
+
+#define swHexDump(data, length) \
+    do { \
+        const char *__data = (data); \
+        size_t __length = (length); \
+        swDebug("+----------+------------+-----------+-----------+------------+------------------+"); \
+        for (size_t of = 0; of < __length; of += 16) \
+        { \
+            char hex[16 * 3 + 1]; \
+            char str[16 + 1]; \
+            size_t i, hof = 0, sof = 0; \
+            for (i = of; i < of + 16 && i < __length; i++) \
+            { \
+                hof += sprintf(hex + hof, "%02x ", (__data)[i] & 0xff); \
+                sof += sprintf(str + sof, "%c", isprint((int) (__data)[i]) ? (__data)[i] : '.'); \
+            } \
+            swDebug("| %08x | %-48s| %-16s |", of, hex, str); \
+        } \
+        swDebug("+----------+------------+-----------+-----------+------------+------------------+"); \
+    } while (0)
 #else
 #define swDebug(str,...)
+#define swHexDump(data, length)
 #endif
 
 enum swTraceType
