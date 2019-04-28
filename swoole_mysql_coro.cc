@@ -19,8 +19,8 @@
 #include "php_swoole_cxx.h"
 
 #include "swoole_coroutine.h"
-#include "swoole_mysql_coro.h"
 #include "socket.h"
+#include "mysql.h"
 
 // see mysqlnd 'L64' macro redefined
 #undef L64
@@ -29,6 +29,10 @@ extern "C" {
 #include "ext/hash/php_hash.h"
 #include "ext/hash/php_hash_sha.h"
 #include "ext/standard/php_math.h"
+#ifdef SW_USE_MYSQLND
+#include "ext/mysqlnd/mysqlnd.h"
+#include "ext/mysqlnd/mysqlnd_charset.h"
+#endif
 }
 
 #include <unordered_map>
