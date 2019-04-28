@@ -913,23 +913,24 @@ void mysql_client::recv_query_response(zval *return_value)
         state = ok_packet.server_status.more_results_exists() ? SW_MYSQL_STATE_QUERY_MORE_RESULTS : SW_MYSQL_STATE_IDLE;
         RETURN_TRUE;
     }
-    mysql::lcb_packet lcb_packet(data);
-    if (unlikely(lcb_packet.length == 0))
-    {
-        // is it possible?
-        proto_error(data, SW_MYSQL_PACKET_FIELD);
-        RETURN_FALSE;
-    }
-    // loop fields
-    result.alloc_fields(lcb_packet.length);
-    for (uint32_t i = 0; i < lcb_packet.length; i++)
-    {
-        if (unlikely(!(data = recv_packet())))
+    do {
+        mysql::lcb_packet lcb_packet(data);
+        if (unlikely(lcb_packet.length == 0))
         {
+            // is it possible?
+            proto_error(data, SW_MYSQL_PACKET_FIELD);
             RETURN_FALSE;
         }
-        result.set_field(i, data);
-    }
+        result.alloc_fields(lcb_packet.length);
+        for (uint32_t i = 0; i < lcb_packet.length; i++)
+        {
+            if (unlikely(!(data = recv_packet())))
+            {
+                RETURN_FALSE;
+            }
+            result.set_field(i, data);
+        }
+    } while (0);
     // expect eof
     if (unlikely(!(data = recv_eof_packet())))
     {
@@ -1431,24 +1432,24 @@ void mysql_statement::recv_execute_response(zval *return_value)
         RETURN_TRUE;
     }
     do {
-        // skip fileds info if length is equal
-        // (because we have already known it when we prepared statement)
         mysql::lcb_packet lcb_packet(data);
-        bool should_parse_fields = lcb_packet.length != result.get_fields_length();
-        if (unlikely(should_parse_fields))
+        if (unlikely(lcb_packet.length == 0))
         {
-            result.alloc_fields(lcb_packet.length);
+            // is it possible?
+            client->proto_error(data, SW_MYSQL_PACKET_FIELD);
+            RETURN_FALSE;
         }
+        // although we have already known the field data when we prepared the statement,
+        // we don't know if the data is always reliable, such as when we using stored procedure...
+        // so we should not optimize here for the time being for stability
+        result.alloc_fields(lcb_packet.length);
         for (size_t i = 0; i < result.get_fields_length(); i++)
         {
             if (unlikely(!(data = client->recv_packet())))
             {
                 RETURN_FALSE;
             }
-            if (unlikely(should_parse_fields))
-            {
-                result.set_field(i, data);
-            }
+            result.set_field(i, data);
         }
     } while (0);
     // expect eof
