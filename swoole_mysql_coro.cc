@@ -239,7 +239,7 @@ public:
         }
     }
 
-    const char* recv_length(size_t need_length);
+    const char* recv_length(size_t need_length, const bool try_to_recycle = false);
     const char* recv_packet();
 
     inline const char* recv_none_error_packet()
@@ -639,18 +639,20 @@ bool mysql_client::connect(std::string host, uint16_t port, bool ssl)
     return true;
 }
 
-const char* mysql_client::recv_length(size_t need_length)
+const char* mysql_client::recv_length(size_t need_length, const bool try_to_recycle)
 {
-    if (unlikely(!check_connection()))
-    {
-        return nullptr;
-    }
-    else
+    if (likely(check_connection()))
     {
         ssize_t retval;
         swString *buffer = socket->get_read_buffer();
         off_t offset = buffer->offset; // save offset instead of buffer point (due to realloc)
         size_t read_n = buffer->length - buffer->offset; // readable bytes
+        if (try_to_recycle && read_n == 0)
+        {
+            swTraceLog(SW_TRACE_MYSQL_CLIENT, "mysql buffer will be recycled, length=%zu, offset=%jd", buffer->length, (intmax_t) offset);
+            swString_clear(buffer);
+            offset = 0;
+        }
         while (read_n < need_length)
         {
             if (unlikely(has_timedout(SW_TIMEOUT_READ)))
@@ -658,14 +660,6 @@ const char* mysql_client::recv_length(size_t need_length)
                 io_error();
                 return nullptr;
             }
-            retval = socket->recv(buffer->str + buffer->length, buffer->size - buffer->length);
-            if (unlikely(retval <= 0))
-            {
-                io_error();
-                return nullptr;
-            }
-            read_n += retval;
-            buffer->length += retval;
             if (unlikely(buffer->length == buffer->size))
             {
                 /* offset + need_length = new size (min) */
@@ -677,20 +671,29 @@ const char* mysql_client::recv_length(size_t need_length)
                 }
                 else
                 {
-                    swTraceLog(SW_TRACE_MYSQL_CLIENT, "buffer extend to %zu", buffer->size);
+                    swTraceLog(SW_TRACE_MYSQL_CLIENT, "mysql buffer extend to %zu", buffer->size);
                 }
             }
+            retval = socket->recv(buffer->str + buffer->length, buffer->size - buffer->length);
+            if (unlikely(retval <= 0))
+            {
+                io_error();
+                return nullptr;
+            }
+            read_n += retval;
+            buffer->length += retval;
         }
         buffer->offset += need_length;
         return buffer->str + offset;
     }
+    return nullptr;
 }
 
 const char* mysql_client::recv_packet()
 {
     const char *p;
     uint32_t length;
-    p = recv_length(SW_MYSQL_PACKET_HEADER_SIZE);
+    p = recv_length(SW_MYSQL_PACKET_HEADER_SIZE, true);
     if (unlikely(!p))
     {
         return nullptr;
@@ -705,19 +708,6 @@ const char* mysql_client::recv_packet()
     /* Notice: why we do this? because buffer maybe reallocated when recv data */
     return p - SW_MYSQL_PACKET_HEADER_SIZE;
 }
-
-//const char* mysql_client::recv_text_data()
-//{
-//    const char *p;
-//    uint32_t packet_length;
-//    uint64_t length;
-//    bool nul;
-//    p = recv_length(SW_MYSQL_PACKET_HEADER_SIZE);
-//    packet_length = mysql::server_packet::get_length(p);
-//    p = recv_length(packet_length);
-//    p += mysql::read_lcb(p, &length, &nul);
-//
-//}
 
 bool mysql_client::send_packet(mysql::client_packet *packet)
 {
