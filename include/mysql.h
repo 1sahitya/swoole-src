@@ -28,8 +28,6 @@
 #endif
 #endif
 
-#include <string>
-
 enum sw_mysql_command
 {
     SW_MYSQL_COM_NULL = -1,
@@ -80,63 +78,30 @@ enum sw_mysql_handshake_state
 
 enum sw_mysql_auth_signature
 {
-    SW_MYSQL_AUTH_SIGNATURE_ERROR = 0x00, // get signature failed
-    SW_MYSQL_AUTH_SIGNATURE = 0x01,
-    SW_MYSQL_AUTH_SIGNATURE_RSA_PREPARED = 0x02,
-    SW_MYSQL_AUTH_SIGNATURE_SUCCESS = 0x03,
-    SW_MYSQL_AUTH_SIGNATURE_FULL_AUTH_REQUIRED = 0x04, //rsa required
+    SW_MYSQL_AUTH_SIGNATURE_ERROR              = 0x00, // get signature failed
+    SW_MYSQL_AUTH_SIGNATURE                    = 0x01,
+    SW_MYSQL_AUTH_SIGNATURE_RSA_PREPARED       = 0x02,
+    SW_MYSQL_AUTH_SIGNATURE_SUCCESS            = 0x03,
+    SW_MYSQL_AUTH_SIGNATURE_FULL_AUTH_REQUIRED = 0x04, // rsa required
 };
 
-enum sw_mysql_state_flag
+enum sw_mysql_command_flag
 {
-    SW_MYSQL_STATE_FLAG_QUERY   = 1 << 4,
-    SW_MYSQL_STATE_FLAG_EXECUTE = 1 << 5,
+    SW_MYSQL_COMMAND_FLAG_QUERY   = 1 << 4,
+    SW_MYSQL_COMMAND_FLAG_EXECUTE = 1 << 5,
 };
 
 enum sw_mysql_state
 {
     SW_MYSQL_STATE_IDLE                 = 0,
-    SW_MYSQL_STATE_QUERY                = 1 | SW_MYSQL_STATE_FLAG_QUERY,
-    SW_MYSQL_STATE_QUERY_FETCH          = 2 | SW_MYSQL_STATE_FLAG_QUERY,
-    SW_MYSQL_STATE_QUERY_MORE_RESULTS   = 3 | SW_MYSQL_STATE_FLAG_QUERY,
-    SW_MYSQL_STATE_PREPARE              = 4 | SW_MYSQL_STATE_FLAG_QUERY,
-    SW_MYSQL_STATE_EXECUTE              = 5 | SW_MYSQL_STATE_FLAG_EXECUTE,
-    SW_MYSQL_STATE_EXECUTE_FETCH        = 6 | SW_MYSQL_STATE_FLAG_EXECUTE,
-    SW_MYSQL_STATE_EXECUTE_MORE_RESULTS = 7 | SW_MYSQL_STATE_FLAG_EXECUTE,
-    SW_MYSQL_STATE_CLOSED               = 8 | SW_MYSQL_STATE_FLAG_EXECUTE,
-};
-
-enum sw_mysql_error_code
-{
-    SW_MYSQL_ERR_NULL = 0,
-    // it should be bigger than SW_ABORT
-    // else may be in conflict with SW_xxx err code.
-    SW_MYSQL_ERR_PROTOCOL_ERROR = 101,
-    SW_MYSQL_ERR_BUFFER_OVERSIZE,
-    SW_MYSQL_ERR_PACKET_CORRUPT,
-    SW_MYSQL_ERR_WANT_READ,
-    SW_MYSQL_ERR_WANT_WRITE,
-    SW_MYSQL_ERR_UNKNOWN_ERROR,
-
-    SW_MYSQL_ERR_MYSQL_ERROR,
-    SW_MYSQL_ERR_SERVER_LOST,
-    SW_MYSQL_ERR_BAD_PORT,
-    SW_MYSQL_ERR_RESOLV_HOST,
-    SW_MYSQL_ERR_SYSTEM,
-    SW_MYSQL_ERR_CANT_CONNECT,
-    SW_MYSQL_ERR_BUFFER_TOO_SMALL,
-    SW_MYSQL_ERR_UNEXPECT_R_STATE,
-    SW_MYSQL_ERR_STRFIELD_CORRUPT,
-    SW_MYSQL_ERR_BINFIELD_CORRUPT,
-    SW_MYSQL_ERR_BAD_LCB,
-    SW_MYSQL_ERR_LEN_OVER_BUFFER,
-    SW_MYSQL_ERR_CONVLONG,
-    SW_MYSQL_ERR_CONVLONGLONG,
-    SW_MYSQL_ERR_CONVFLOAT,
-    SW_MYSQL_ERR_CONVDOUBLE,
-    SW_MYSQL_ERR_CONVTIME,
-    SW_MYSQL_ERR_CONVTIMESTAMP,
-    SW_MYSQL_ERR_CONVDATE
+    SW_MYSQL_STATE_QUERY                = 1 | SW_MYSQL_COMMAND_FLAG_QUERY,
+    SW_MYSQL_STATE_QUERY_FETCH          = 2 | SW_MYSQL_COMMAND_FLAG_QUERY,
+    SW_MYSQL_STATE_QUERY_MORE_RESULTS   = 3 | SW_MYSQL_COMMAND_FLAG_QUERY,
+    SW_MYSQL_STATE_PREPARE              = 4 | SW_MYSQL_COMMAND_FLAG_QUERY,
+    SW_MYSQL_STATE_EXECUTE              = 5 | SW_MYSQL_COMMAND_FLAG_EXECUTE,
+    SW_MYSQL_STATE_EXECUTE_FETCH        = 6 | SW_MYSQL_COMMAND_FLAG_EXECUTE,
+    SW_MYSQL_STATE_EXECUTE_MORE_RESULTS = 7 | SW_MYSQL_COMMAND_FLAG_EXECUTE,
+    SW_MYSQL_STATE_CLOSED               = 8 | SW_MYSQL_COMMAND_FLAG_EXECUTE,
 };
 
 enum sw_mysql_packet_types
@@ -182,16 +147,16 @@ enum sw_mysql_field_types
     SW_MYSQL_TYPE_VARCHAR,
     SW_MYSQL_TYPE_BIT,
     SW_MYSQL_TYPE_JSON = 245,
-    SW_MYSQL_TYPE_NEWDECIMAL = 246,
-    SW_MYSQL_TYPE_ENUM = 247,
-    SW_MYSQL_TYPE_SET = 248,
-    SW_MYSQL_TYPE_TINY_BLOB = 249,
-    SW_MYSQL_TYPE_MEDIUM_BLOB = 250,
-    SW_MYSQL_TYPE_LONG_BLOB = 251,
-    SW_MYSQL_TYPE_BLOB = 252,
-    SW_MYSQL_TYPE_VAR_STRING = 253,
-    SW_MYSQL_TYPE_STRING = 254,
-    SW_MYSQL_TYPE_GEOMETRY = 255
+    SW_MYSQL_TYPE_NEWDECIMAL,
+    SW_MYSQL_TYPE_ENUM,
+    SW_MYSQL_TYPE_SET,
+    SW_MYSQL_TYPE_TINY_BLOB,
+    SW_MYSQL_TYPE_MEDIUM_BLOB,
+    SW_MYSQL_TYPE_LONG_BLOB,
+    SW_MYSQL_TYPE_BLOB,
+    SW_MYSQL_TYPE_VAR_STRING,
+    SW_MYSQL_TYPE_STRING,
+    SW_MYSQL_TYPE_GEOMETRY
 };
 
 // ref: https://dev.mysql.com/doc/dev/mysql-server/8.0.0/group__group__cs__capabilities__flags.html
@@ -348,229 +313,24 @@ namespace swoole
 {
 namespace mysql
 {
-typedef struct
-{
-    unsigned int nr;
-    const char *name;
-    const char *collation;
-} charset_t;
+char get_charset(const char *name);
+uint8_t get_static_type_size(uint8_t type);
 
-inline int get_charset(const char *name)
+inline uint8_t read_lcb_size(const char *p)
 {
-    static const charset_t charsets[] =
+    switch ((uchar) p[0])
     {
-        { 1, "big5", "big5_chinese_ci" },
-        { 3, "dec8", "dec8_swedish_ci" },
-        { 4, "cp850", "cp850_general_ci" },
-        { 6, "hp8", "hp8_english_ci" },
-        { 7, "koi8r", "koi8r_general_ci" },
-        { 8, "latin1", "latin1_swedish_ci" },
-        { 5, "latin1", "latin1_german1_ci" },
-        { 9, "latin2", "latin2_general_ci" },
-        { 2, "latin2", "latin2_czech_cs" },
-        { 10, "swe7", "swe7_swedish_ci" },
-        { 11, "ascii", "ascii_general_ci" },
-        { 12, "ujis", "ujis_japanese_ci" },
-        { 13, "sjis", "sjis_japanese_ci" },
-        { 16, "hebrew", "hebrew_general_ci" },
-        { 17, "filename", "filename" },
-        { 18, "tis620", "tis620_thai_ci" },
-        { 19, "euckr", "euckr_korean_ci" },
-        { 21, "latin2", "latin2_hungarian_ci" },
-        { 27, "latin2", "latin2_croatian_ci" },
-        { 22, "koi8u", "koi8u_general_ci" },
-        { 24, "gb2312", "gb2312_chinese_ci" },
-        { 25, "greek", "greek_general_ci" },
-        { 26, "cp1250", "cp1250_general_ci" },
-        { 28, "gbk", "gbk_chinese_ci" },
-        { 30, "latin5", "latin5_turkish_ci" },
-        { 31, "latin1", "latin1_german2_ci" },
-        { 15, "latin1", "latin1_danish_ci" },
-        { 32, "armscii8", "armscii8_general_ci" },
-        { 33, "utf8", "utf8_general_ci" },
-        { 35, "ucs2", "ucs2_general_ci" },
-        { 36, "cp866", "cp866_general_ci" },
-        { 37, "keybcs2", "keybcs2_general_ci" },
-        { 38, "macce", "macce_general_ci" },
-        { 39, "macroman", "macroman_general_ci" },
-        { 40, "cp852", "cp852_general_ci" },
-        { 41, "latin7", "latin7_general_ci" },
-        { 20, "latin7", "latin7_estonian_cs" },
-        { 57, "cp1256", "cp1256_general_ci" },
-        { 59, "cp1257", "cp1257_general_ci" },
-        { 63, "binary", "binary" },
-        { 97, "eucjpms", "eucjpms_japanese_ci" },
-        { 29, "cp1257", "cp1257_lithuanian_ci" },
-        { 31, "latin1", "latin1_german2_ci" },
-        { 34, "cp1250", "cp1250_czech_cs" },
-        { 42, "latin7", "latin7_general_cs" },
-        { 43, "macce", "macce_bin" },
-        { 44, "cp1250", "cp1250_croatian_ci" },
-        { 45, "utf8mb4", "utf8mb4_general_ci" },
-        { 46, "utf8mb4", "utf8mb4_bin" },
-        { 47, "latin1", "latin1_bin" },
-        { 48, "latin1", "latin1_general_ci" },
-        { 49, "latin1", "latin1_general_cs" },
-        { 51, "cp1251", "cp1251_general_ci" },
-        { 14, "cp1251", "cp1251_bulgarian_ci" },
-        { 23, "cp1251", "cp1251_ukrainian_ci" },
-        { 50, "cp1251", "cp1251_bin" },
-        { 52, "cp1251", "cp1251_general_cs" },
-        { 53, "macroman", "macroman_bin" },
-        { 54, "utf16", "utf16_general_ci" },
-        { 55, "utf16", "utf16_bin" },
-        { 56, "utf16le", "utf16le_general_ci" },
-        { 58, "cp1257", "cp1257_bin" },
-        { 60, "utf32", "utf32_general_ci" },
-        { 61, "utf32", "utf32_bin" },
-        { 62, "utf16le", "utf16le_bin" },
-        { 64, "armscii8", "armscii8_bin" },
-        { 65, "ascii", "ascii_bin" },
-        { 66, "cp1250", "cp1250_bin" },
-        { 67, "cp1256", "cp1256_bin" },
-        { 68, "cp866", "cp866_bin" },
-        { 69, "dec8", "dec8_bin" },
-        { 70, "greek", "greek_bin" },
-        { 71, "hebrew", "hebrew_bin" },
-        { 72, "hp8", "hp8_bin" },
-        { 73, "keybcs2", "keybcs2_bin" },
-        { 74, "koi8r", "koi8r_bin" },
-        { 75, "koi8u", "koi8u_bin" },
-        { 77, "latin2", "latin2_bin" },
-        { 78, "latin5", "latin5_bin" },
-        { 79, "latin7", "latin7_bin" },
-        { 80, "cp850", "cp850_bin" },
-        { 81, "cp852", "cp852_bin" },
-        { 82, "swe7", "swe7_bin" },
-        { 83, "utf8", "utf8_bin" },
-        { 84, "big5", "big5_bin" },
-        { 85, "euckr", "euckr_bin" },
-        { 86, "gb2312", "gb2312_bin" },
-        { 87, "gbk", "gbk_bin" },
-        { 88, "sjis", "sjis_bin" },
-        { 89, "tis620", "tis620_bin" },
-        { 90, "ucs2", "ucs2_bin" },
-        { 91, "ujis", "ujis_bin" },
-        { 92, "geostd8", "geostd8_general_ci" },
-        { 93, "geostd8", "geostd8_bin" },
-        { 94, "latin1", "latin1_spanish_ci" },
-        { 95, "cp932", "cp932_japanese_ci" },
-        { 96, "cp932", "cp932_bin" },
-        { 97, "eucjpms", "eucjpms_japanese_ci" },
-        { 98, "eucjpms", "eucjpms_bin" },
-        { 99, "cp1250", "cp1250_polish_ci" },
-        { 128, "ucs2", "ucs2_unicode_ci" },
-        { 129, "ucs2", "ucs2_icelandic_ci" },
-        { 130, "ucs2", "ucs2_latvian_ci" },
-        { 131, "ucs2", "ucs2_romanian_ci" },
-        { 132, "ucs2", "ucs2_slovenian_ci" },
-        { 133, "ucs2", "ucs2_polish_ci" },
-        { 134, "ucs2", "ucs2_estonian_ci" },
-        { 135, "ucs2", "ucs2_spanish_ci" },
-        { 136, "ucs2", "ucs2_swedish_ci" },
-        { 137, "ucs2", "ucs2_turkish_ci" },
-        { 138, "ucs2", "ucs2_czech_ci" },
-        { 139, "ucs2", "ucs2_danish_ci" },
-        { 140, "ucs2", "ucs2_lithuanian_ci" },
-        { 141, "ucs2", "ucs2_slovak_ci" },
-        { 142, "ucs2", "ucs2_spanish2_ci" },
-        { 143, "ucs2", "ucs2_roman_ci" },
-        { 144, "ucs2", "ucs2_persian_ci" },
-        { 145, "ucs2", "ucs2_esperanto_ci" },
-        { 146, "ucs2", "ucs2_hungarian_ci" },
-        { 147, "ucs2", "ucs2_sinhala_ci" },
-        { 148, "ucs2", "ucs2_german2_ci" },
-        { 149, "ucs2", "ucs2_croatian_ci" },
-        { 150, "ucs2", "ucs2_unicode_520_ci" },
-        { 151, "ucs2", "ucs2_vietnamese_ci" },
-        { 160, "utf32", "utf32_unicode_ci" },
-        { 161, "utf32", "utf32_icelandic_ci" },
-        { 162, "utf32", "utf32_latvian_ci" },
-        { 163, "utf32", "utf32_romanian_ci" },
-        { 164, "utf32", "utf32_slovenian_ci" },
-        { 165, "utf32", "utf32_polish_ci" },
-        { 166, "utf32", "utf32_estonian_ci" },
-        { 167, "utf32", "utf32_spanish_ci" },
-        { 168, "utf32", "utf32_swedish_ci" },
-        { 169, "utf32", "utf32_turkish_ci" },
-        { 170, "utf32", "utf32_czech_ci" },
-        { 171, "utf32", "utf32_danish_ci" },
-        { 172, "utf32", "utf32_lithuanian_ci" },
-        { 173, "utf32", "utf32_slovak_ci" },
-        { 174, "utf32", "utf32_spanish2_ci" },
-        { 175, "utf32", "utf32_roman_ci" },
-        { 176, "utf32", "utf32_persian_ci" },
-        { 177, "utf32", "utf32_esperanto_ci" },
-        { 178, "utf32", "utf32_hungarian_ci" },
-        { 179, "utf32", "utf32_sinhala_ci" },
-        { 180, "utf32", "utf32_german2_ci" },
-        { 181, "utf32", "utf32_croatian_ci" },
-        { 182, "utf32", "utf32_unicode_520_ci" },
-        { 183, "utf32", "utf32_vietnamese_ci" },
-        { 192, "utf8", "utf8_unicode_ci" },
-        { 193, "utf8", "utf8_icelandic_ci" },
-        { 194, "utf8", "utf8_latvian_ci" },
-        { 195, "utf8", "utf8_romanian_ci" },
-        { 196, "utf8", "utf8_slovenian_ci" },
-        { 197, "utf8", "utf8_polish_ci" },
-        { 198, "utf8", "utf8_estonian_ci" },
-        { 199, "utf8", "utf8_spanish_ci" },
-        { 200, "utf8", "utf8_swedish_ci" },
-        { 201, "utf8", "utf8_turkish_ci" },
-        { 202, "utf8", "utf8_czech_ci" },
-        { 203, "utf8", "utf8_danish_ci" },
-        { 204, "utf8", "utf8_lithuanian_ci" },
-        { 205, "utf8", "utf8_slovak_ci" },
-        { 206, "utf8", "utf8_spanish2_ci" },
-        { 207, "utf8", "utf8_roman_ci" },
-        { 208, "utf8", "utf8_persian_ci" },
-        { 209, "utf8", "utf8_esperanto_ci" },
-        { 210, "utf8", "utf8_hungarian_ci" },
-        { 211, "utf8", "utf8_sinhala_ci" },
-        { 212, "utf8", "utf8_german2_ci" },
-        { 213, "utf8", "utf8_croatian_ci" },
-        { 214, "utf8", "utf8_unicode_520_ci" },
-        { 215, "utf8", "utf8_vietnamese_ci" },
-
-        { 224, "utf8mb4", "utf8mb4_unicode_ci" },
-        { 225, "utf8mb4", "utf8mb4_icelandic_ci" },
-        { 226, "utf8mb4", "utf8mb4_latvian_ci" },
-        { 227, "utf8mb4", "utf8mb4_romanian_ci" },
-        { 228, "utf8mb4", "utf8mb4_slovenian_ci" },
-        { 229, "utf8mb4", "utf8mb4_polish_ci" },
-        { 230, "utf8mb4", "utf8mb4_estonian_ci" },
-        { 231, "utf8mb4", "utf8mb4_spanish_ci" },
-        { 232, "utf8mb4", "utf8mb4_swedish_ci" },
-        { 233, "utf8mb4", "utf8mb4_turkish_ci" },
-        { 234, "utf8mb4", "utf8mb4_czech_ci" },
-        { 235, "utf8mb4", "utf8mb4_danish_ci" },
-        { 236, "utf8mb4", "utf8mb4_lithuanian_ci" },
-        { 237, "utf8mb4", "utf8mb4_slovak_ci" },
-        { 238, "utf8mb4", "utf8mb4_spanish2_ci" },
-        { 239, "utf8mb4", "utf8mb4_roman_ci" },
-        { 240, "utf8mb4", "utf8mb4_persian_ci" },
-        { 241, "utf8mb4", "utf8mb4_esperanto_ci" },
-        { 242, "utf8mb4", "utf8mb4_hungarian_ci" },
-        { 243, "utf8mb4", "utf8mb4_sinhala_ci" },
-        { 244, "utf8mb4", "utf8mb4_german2_ci" },
-        { 245, "utf8mb4", "utf8mb4_croatian_ci" },
-        { 246, "utf8mb4", "utf8mb4_unicode_520_ci" },
-        { 247, "utf8mb4", "utf8mb4_vietnamese_ci" },
-        { 248, "gb18030", "gb18030_chinese_ci" },
-        { 249, "gb18030", "gb18030_bin" },
-        { 254, "utf8", "utf8_general_cs" },
-        { 0, NULL, NULL},
-    };
-    const charset_t *c = charsets;
-    while (c[0].nr)
-    {
-        if (!strcasecmp(c->name, name))
-        {
-            return c->nr;
-        }
-        ++c;
+    case 251:
+        return 1;
+    case 252:
+        return 3;
+    case 253:
+        return 4;
+    case 254:
+        return 9;
+    default:
+        return 1;
     }
-    return -1;
 }
 
 inline uint8_t read_lcb(const char *p, uint64_t *length, bool *nul)
@@ -966,128 +726,153 @@ protected:
 
 typedef field_packet param_packet;
 
+class row_data
+{
+public:
+    char stack_buffer[32];
+    struct {
+        uint64_t length; // binary code length
+        bool nul; // is nul?
+    } text;
+    row_data(const char *data)
+    {
+        next_packet(data);
+    }
+    inline void next_packet(const char *data)
+    {
+        read_ptr = packet_body = data + SW_MYSQL_PACKET_HEADER_SIZE;
+        packet_eof = packet_body + packet::get_length(data);
+    }
+    inline bool eof()
+    {
+        return read_ptr == packet_eof;
+    }
+    inline const char* read(size_t length)
+    {
+        if (likely(read_ptr + length <= packet_eof))
+        {
+            const char *p = read_ptr;
+            read_ptr += length;
+            return p;
+        }
+        return nullptr;
+    }
+    inline uint32_t recv(char *buf, size_t size)
+    {
+        uint32_t readable_length = packet_eof - read_ptr;
+        uint32_t read_bytes = MIN(readable_length, size);
+        if (likely(read_bytes > 0))
+        {
+            memcpy(buf, read_ptr, read_bytes);
+            read_ptr += read_bytes;
+        }
+        return read_bytes;
+    }
+protected:
+    const char *packet_body;
+    const char *packet_eof;
+    const char *read_ptr;
+};
+
 class row_data_text
 {
 public:
-    uint64_t length = 0;
-    bool nul = false;
-    const char *body = nullptr;
+    uint64_t length;
+    bool nul;
+    const char *body;
     row_data_text(const char **pp)
     {
         body = *pp + read_lcb(*pp, &length, &nul);
         *pp = body + length;
         swTraceLog(
-            SW_TRACE_MYSQL_CLIENT, "text[%" PRIu64 "]: %.*s%s, nul=%u",
-            length, MIN(64, length), body, length > 64 ? "..." : "", nul
+            SW_TRACE_MYSQL_CLIENT,
+            "text[%" PRIu64 "]: %.*s%s",
+            length, MIN(64, length), body,
+            nul ? "null" : ((length > 64 /*|| length > readable_length*/) ? "..." : "")
         );
     }
 };
 
-//    typedef union
-//    {
-//        signed char stiny;
-//        uchar utiny;
-//        uchar mbool;
-//        short ssmall;
-//        unsigned short small;
-//        int sint;
-//        uint32_t uint;
-//        long long sbigint;
-//        unsigned long long ubigint;
-//        float mfloat;
-//        double mdouble;
-//    } row;
-
-class string
+inline std::string datetime(const char *p, uint8_t length, uint32_t decimals)
 {
-public:
-    inline const char* str()
+    uint16_t y = 0;
+    uint8_t m = 0, d = 0, h = 0, i = 0, s = 0;
+    uint32_t sp = 0;
+    if (length != 0)
     {
-        return self.c_str();
-    }
-    inline size_t len()
-    {
-        return self.length();
-    }
-protected:
-    std::string self;
-};
-
-class datetime : public string
-{
-public:
-    datetime(const char **pp)
-    {
-        const char *p = *pp;
-        uint16_t y = 0;
-        uint8_t M = 0, d = 0, h = 0, m = 0, s = 0, n;
-        n = *(uint8_t *) (p);
-        if (n != 0)
+        y = sw_mysql_uint2korr2korr(p);
+        m = *(uint8_t *) (p + 2);
+        d = *(uint8_t *) (p + 3);
+        if (length > 4)
         {
-            y = *(uint16_t *) (p + 1);
-            M = *(uint8_t *) (p + 3);
-            d = *(uint8_t *) (p + 4);
-            if (n > 4)
-            {
-                h = *(uint8_t *) (p + 5);
-                m = *(uint8_t *) (p + 6);
-                s = *(uint8_t *) (p + 7);
-            }
+            h = *(uint8_t *) (p + 4);
+            i = *(uint8_t *) (p + 5);
+            s = *(uint8_t *) (p + 6);
         }
-        self = swoole::cpp_string::format("%.4u-%.2u-%.2u %.2u:%.2u:%.2u", y, M, d, h, m, s);
-        *pp += n;
-    }
-};
-
-class time : public string
-{
-public:
-    time(const char **pp)
-    {
-        const char *p = *pp;
-        uint8_t h = 0, m = 0, s = 0;
-        uint8_t n = *(uint8_t *) (p);
-        if (n != 0)
+        if (length > 7)
         {
-            h = *(uint8_t *) (p + 6);
-            m = *(uint8_t *) (p + 7);
-            s = *(uint8_t *) (p + 8);
+            sp = sw_mysql_uint2korr4korr(p + 7);
         }
-        self = swoole::cpp_string::format("%.2u:%.2u:%.2u", h, m, s);
-        *pp += n;
     }
-};
+    if (decimals > 0 && decimals < 7) {
+        return swoole::cpp_string::format(
+            "%04u-%02u-%02u %02u:%02u:%02u.%0*u",
+            y, m, d, h, i, s, decimals, (uint32_t) (sp / ::pow(10, (double) (6 - decimals)))
+        );
+    } else {
+        return swoole::cpp_string::format(
+            "%04u-%02u-%02u %02u:%02u:%02u",
+            y, m, d, h, i, s
+        );
+    }
+}
 
-class date : public string
+inline std::string time(const char *p, uint8_t length, uint32_t decimals)
 {
-public:
-    date(const char **pp)
+    bool neg = false;
+    uint32_t d = 0, sp = 0;
+    uint8_t h = 0, m = 0, s = 0;
+    if (length != 0)
     {
-        const char *p = *pp;
-        uint8_t M = 0, d = 0, n;
-        uint16_t y = 0;
-        n = *(uint8_t *) (p);
-        if (n != 0)
+        neg = (bool) *((uint8_t *) p);
+        d = sw_mysql_uint2korr4korr(p + 1);
+        h = *(uint8_t *) (p + 5);
+        m = *(uint8_t *) (p + 6);
+        s = *(uint8_t *) (p + 7);
+        if (length > 8)
         {
-            y = *(uint16_t *) (p + 1);
-            M = *(uint8_t *) (p + 3);
-            d = *(uint8_t *) (p + 4);
+            sp = sw_mysql_uint2korr4korr(p + 8);
         }
-        self = swoole::cpp_string::format("%.4u-%.2u-%.2u", y, M, d);
-        *pp += n;
+        if (d != 0) {
+            /* Convert days to hours at once */
+            h += d * 24;
+        }
     }
-};
+    if (decimals > 0 && decimals < 7) {
+        return swoole::cpp_string::format(
+            "%s%02u:%02u:%02u.%0*u",
+            (neg ? "-" : ""), h, m, s, decimals, (uint32_t) (sp / ::pow(10, (double) (6 - decimals)))
+        );
+    } else {
+        return swoole::cpp_string::format(
+            "%s%02u:%02u:%02u",
+            (neg ? "-" : ""), h, m, s
+        );
+    }
+}
 
-class year : public string
+inline std::string date(const char *p, uint8_t length)
 {
-public:
-    year(const char **pp)
+    uint16_t y = 0;
+    uint8_t m = 0, d = 0;
+    if (length != 0)
     {
-        uint16_t y = *(uint16_t *) (*pp);
-        self = swoole::cpp_string::format("%.4u", y);
-        *pp += 2;
+        y = sw_mysql_uint2korr2korr(p);
+        m = *(uint8_t *) (p + 2);
+        d = *(uint8_t *) (p + 3);
     }
-};
+    return swoole::cpp_string::format("%04u-%02u-%02u", y, m, d);
+}
 
 class result_info
 {
@@ -1176,6 +961,33 @@ public:
             id, field_count, param_count, warning_count
         );
     }
+};
+
+class null_bitmap
+{
+public:
+    static uint32_t get_size(uint32_t field_length)
+    {
+        return ((field_length + 9) / 8) + 1;
+    }
+    null_bitmap(const char *p, uint32_t size) :
+            size(size)
+    {
+        map = new char[size];
+        memcpy(map, p, size);
+        swTraceLog(SW_TRACE_MYSQL_CLIENT, "null_count=%u", size);
+    }
+    inline bool is_null(size_t i)
+    {
+        return ((map + 1)[((i + 2) / 8)] & (0x01 << ((i + 2) % 8))) != 0;
+    }
+    ~null_bitmap()
+    {
+        delete[] map;
+    }
+protected:
+    uint32_t size;
+    char *map;
 };
 }
 }
