@@ -749,7 +749,8 @@ bool mysql_client::send_command(enum sw_mysql_command command, const char* sql, 
         /* MySQL single packet size is 16M, we must subpackage */
         while (send_n < length)
         {
-            send_s = MIN(length - send_n, SW_MYSQL_MAX_PACKET_BODY_SIZE);
+            send_s = length - send_n;
+            send_s = MIN(send_s, SW_MYSQL_MAX_PACKET_BODY_SIZE);
             command_packet.set_header(send_s, number++);
             if (unlikely(
                 !send_raw(command_packet.get_data(), SW_MYSQL_PACKET_HEADER_SIZE)) ||
@@ -1369,9 +1370,7 @@ void mysql_statement::send_execute_request(zval *return_value, zval *params)
     {
         RETURN_FALSE;
     }
-    long lval;
-    char buf[10];
-    zval *value;
+
     uint32_t param_count = params ? php_swoole_array_length(params) : 0;
 
     if (param_count != info.param_count)
@@ -1420,7 +1419,9 @@ void mysql_statement::send_execute_request(zval *return_value, zval *params)
         p += param_count * 2;
         buffer->length += param_count * 2;
 
+        char stack_buffer[10];
         zend_ulong index = 0;
+        zval *value;
         ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(params), value)
         {
             if (ZVAL_IS_NULL(value))
@@ -1430,27 +1431,10 @@ void mysql_statement::send_execute_request(zval *return_value, zval *params)
             }
             else
             {
-                sw_mysql_int2store((buffer->str + type_start_offset) + (index * 2), SW_MYSQL_TYPE_VAR_STRING);
                 zend::string str_value(value);
-
-                if (str_value.len() > 0xffff)
-                {
-                    buf[0] = (char) SW_MYSQL_TYPE_VAR_STRING;
-                    if (swString_append_ptr(buffer, buf, 1) < 0)
-                    {
-                        RETURN_FALSE;
-                    }
-                }
-                else if (str_value.len() > 250)
-                {
-                    buf[0] = (char) SW_MYSQL_TYPE_BLOB;
-                    if (swString_append_ptr(buffer, buf, 1) < 0)
-                    {
-                        RETURN_FALSE;
-                    }
-                }
-                lval = mysql::write_lcb(buf, str_value.len());
-                if (swString_append_ptr(buffer, buf, lval) < 0)
+                uint8_t lcb_size = mysql::write_lcb(stack_buffer, str_value.len());
+                sw_mysql_int2store((buffer->str + type_start_offset) + (index * 2), SW_MYSQL_TYPE_VAR_STRING);
+                if (swString_append_ptr(buffer, stack_buffer, lcb_size) < 0)
                 {
                     RETURN_FALSE;
                 }
@@ -1463,11 +1447,34 @@ void mysql_statement::send_execute_request(zval *return_value, zval *params)
         }
         ZEND_HASH_FOREACH_END();
     }
-    mysql::packet::set_header(buffer->str, buffer->length - SW_MYSQL_PACKET_HEADER_SIZE, 0);
-    if (unlikely(!client->send_raw(buffer->str, buffer->length)))
-    {
-        RETURN_FALSE;
-    }
+    do {
+        size_t length = buffer->length - SW_MYSQL_PACKET_HEADER_SIZE;
+        size_t send_s =  MIN(length, SW_MYSQL_MAX_PACKET_BODY_SIZE);
+        mysql::packet::set_header(buffer->str, send_s, 0);
+        if (unlikely(!client->send_raw(buffer->str, SW_MYSQL_PACKET_HEADER_SIZE + send_s)))
+        {
+            RETURN_FALSE;
+        }
+        if (unlikely(length > SW_MYSQL_MAX_PACKET_BODY_SIZE))
+        {
+            size_t send_n = SW_MYSQL_MAX_PACKET_BODY_SIZE, number = 1;
+            /* MySQL single packet size is 16M, we must subpackage */
+            while (send_n < length)
+            {
+                send_s = length - send_n;
+                send_s = MIN(send_s, SW_MYSQL_MAX_PACKET_BODY_SIZE);
+                mysql::packet::set_header(buffer->str, send_s, number++);
+                if (unlikely(
+                    !client->send_raw(buffer->str, SW_MYSQL_PACKET_HEADER_SIZE)) ||
+                    !client->send_raw(buffer->str + SW_MYSQL_PACKET_HEADER_SIZE + send_n, send_s)
+                )
+                {
+                    RETURN_FALSE;
+                }
+                send_n += send_s;
+            }
+        }
+    } while (0);
     client->state = SW_MYSQL_STATE_EXECUTE;
     RETURN_TRUE;
 }

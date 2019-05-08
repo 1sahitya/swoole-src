@@ -1,5 +1,5 @@
 --TEST--
-swoole_mysql_coro: select huge data from db (10M~64M)
+swoole_mysql_coro: select and insert huge data from db (10M~64M)
 --SKIPIF--
 <?php
 require __DIR__ . '/../include/skipif.inc';
@@ -73,9 +73,23 @@ SQL
         $firmware = str_repeat(get_safe_random($random_size), $text_size / $random_size);
         $f_md5 = md5($firmware);
         $f_remark = get_safe_random();
-        $sql = "INSERT INTO `firmware` (`fid`, `firmware`, `f_md5`, `f_remark`) " .
-            "VALUES ({$fid}, '{$firmware}', '{$f_md5}', '{$f_remark}')";
-        $ret = $mysql_query->query($sql);
+        if (mt_rand(0, 1)) {
+            $sql = "INSERT INTO `firmware` (`fid`, `firmware`, `f_md5`, `f_remark`) " .
+                "VALUES ({$fid}, '{$firmware}', '{$f_md5}', '{$f_remark}')";
+            $ret = $mysql_query->query($sql);
+        } else {
+            $sql = "INSERT INTO `firmware` (`fid`, `firmware`, `f_md5`, `f_remark`) VALUES (?, ?, ?, ?)";
+            $pdo_stmt = $mysql_prepare->prepare($sql);
+            if ($pdo_stmt) {
+                $ret = $pdo_stmt->execute([$fid, $firmware, $f_md5, $f_remark]);
+                if (!$ret) {
+                    var_dump($pdo_stmt);
+                    exit;
+                }
+            } else {
+                $ret = false;
+            }
+        }
         if (Assert::assert($ret)) {
             $sql = 'SELECT * FROM `test`.`firmware` WHERE fid=';
             $pdo_stmt = $pdo->prepare("{$sql}?");
