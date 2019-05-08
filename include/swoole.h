@@ -35,8 +35,10 @@ extern "C" {
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
-#include <stddef.h>
 #include <inttypes.h>
+#include <limits.h>
+#include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,7 +48,6 @@ extern "C" {
 #endif
 #include <signal.h>
 #include <time.h>
-#include <limits.h>
 
 #ifdef _WIN32
 #include "win.h"
