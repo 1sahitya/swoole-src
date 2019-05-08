@@ -5,7 +5,6 @@ swoole_mysql_coro: select huge data from db (10M~64M)
 require __DIR__ . '/../include/skipif.inc';
 skip_if_in_valgrind();
 skip_if_pdo_not_support_mysql8();
-skip_unsupported(); // TODO: re-support it
 ?>
 --FILE--
 <?php
@@ -21,7 +20,8 @@ go(function () {
         'port' => MYSQL_SERVER_PORT,
         'user' => MYSQL_SERVER_USER,
         'password' => MYSQL_SERVER_PWD,
-        'database' => MYSQL_SERVER_DB
+        'database' => MYSQL_SERVER_DB,
+        'strict_type' => true
     ];
     // set max_allowed_packet
     $mysql->connect($mysql_server);
@@ -43,10 +43,12 @@ CREATE TABLE `firmware` (
 SQL
     );
     if (!$ret) {
-        exit('unable to create table.');
+        exit('unable to create table: ' . $mysql->error);
     }
     register_shutdown_function(function () use ($mysql) {
-        $mysql->query('DROP TABLE `firmware`');
+        go(function () use ($mysql) {
+            $mysql->query('DROP TABLE `firmware`');
+        });
     });
     $max_allowed_packet = $mysql->query('show VARIABLES like \'max_allowed_packet\'');
     $max_allowed_packet = $max_allowed_packet[0]['Value'] / 1024 / 1024;
@@ -60,9 +62,10 @@ SQL
         "mysql:host=" . MYSQL_SERVER_HOST . ";port=" . MYSQL_SERVER_PORT . ";dbname=" . MYSQL_SERVER_DB . ";charset=utf8",
         MYSQL_SERVER_USER, MYSQL_SERVER_PWD
     );
+    $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
     $mysql_query = new Swoole\Coroutine\Mysql;
-    $mysql_prepare = new Swoole\Coroutine\Mysql;
     $mysql_query->connect($mysql_server);
+    $mysql_prepare = new Swoole\Coroutine\Mysql;
     $mysql_prepare->connect($mysql_server);
     for ($fid = 1; $fid <= $max_allowed_packet / 10; $fid++) {
         $random_size = 2 << mt_rand(2, 9);
@@ -97,10 +100,11 @@ SQL
                     Assert::eq($result['f_md5'], $f_md5);
                     Assert::eq($result['f_remark'], $f_remark);
                 } else {
-                    Assert::reportInvalidArgument('wrong result');
+                    Assert::assert(0, 'wrong result from ' . $from);
+                    unset($result['firmware']); // too long to show
                     phpt_var_dump($result);
                 }
-                phpt_var_dump($from, (strlen($firmware) / 1024 / 1024) . 'M');
+                phpt_var_dump(sprintf('%-16s: %s', $from, (strlen($firmware) / 1024 / 1024) . 'M'));
             }
         }
     }
