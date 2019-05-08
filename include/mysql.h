@@ -368,8 +368,13 @@ inline uint8_t read_lcb(const char *p, uint32_t *length, bool *nul)
     return ret;
 }
 
-inline uint8_t write_lcb(char *p, uint64_t length)
+inline uint8_t write_lcb(char *p, uint64_t length, bool nul = false)
 {
+    if (nul)
+    {
+        sw_mysql_int1store(p++, 251);
+        return 1;
+    }
     if (length <= 250)
     {
         sw_mysql_int1store(p, length);
@@ -377,17 +382,19 @@ inline uint8_t write_lcb(char *p, uint64_t length)
     }
     else if (length <= 0xffff)
     {
+        sw_mysql_int1store(p++, 252);
         sw_mysql_int2store(p, length);
-        return 2;
+        return 3;
     }
     else if (length <= 0xffffff)
     {
+        sw_mysql_int1store(p++, 253);
         sw_mysql_int3store(p, length);
-        return 3;
+        return 4;
     }
     else
     {
-        sw_mysql_int1store(p, 254);
+        sw_mysql_int1store(p++, 254);
         sw_mysql_int8store(p, length);
         return 9;
     }
